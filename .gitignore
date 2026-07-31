@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Environment files (never commit real secrets)
+backend/.env
+
+# Databases
+*.db
+*.sqlite3
+
+# Log files
+*.log
+*.err.log
+
+# Node
+node_modules/
+frontend/dist/
+frontend/vite.log
+frontend/vite.err.log
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

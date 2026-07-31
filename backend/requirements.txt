@@ -1,0 +1,12 @@
+# Backend dependencies for the Doctor Appointment Booking System.
+# Install them with:  pip install -r requirements.txt
+
+fastapi>=0.115            # The web framework used to build the REST API.
+uvicorn[standard]>=0.30    # The server that runs the FastAPI app.
+sqlalchemy>=2.0            # ORM used to talk to PostgreSQL/SQLite.
+psycopg2-binary>=2.9       # PostgreSQL driver used by SQLAlchemy.
+pydantic-settings>=2.3     # Reads configuration from the .env file.
+PyJWT>=2.9                 # Creates and verifies JWT login tokens.
+bcrypt>=4.1                # Hashes and verifies passwords securely.
+python-dotenv>=1.0         # Loads the .env file (used with pydantic-settings).
+email-validator>=2.2       # Validates email addresses in the request schemas.

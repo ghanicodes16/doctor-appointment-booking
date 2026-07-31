@@ -9,7 +9,7 @@
 // The base URL is "/api", which the Vite dev server proxies to the
 // FastAPI backend on port 8000.
 
-const BASE_URL = '/api'
+const BASE_URL = 'https://doctor-appointment-booking-production-392e.up.railway.app/api'
 
 /**
  * Perform a fetch request to the backend.

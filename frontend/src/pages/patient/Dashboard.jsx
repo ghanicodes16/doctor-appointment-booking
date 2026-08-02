@@ -57,10 +57,10 @@ export default function Dashboard() {
           Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} variant="card" height="96px" />)
         ) : (
           <>
-            <StatCard icon={<CalendarIcon />} label="Total appointments" value={stats.total} tone="blue" />
-            <StatCard icon={<ClockIcon />} label="Upcoming" value={stats.upcoming} tone="green" />
-            <StatCard icon={<CheckIcon />} label="Completed" value={stats.completed} tone="purple" />
-            <StatCard icon={<HeartIcon />} label="Favourites" value={stats.favorite_count} tone="rose" />
+           <StatCard icon={<CalendarIcon />} label="Total appointments" value={stats?.total ?? 0} tone="blue" />
+           <StatCard icon={<ClockIcon />} label="Upcoming" value={stats?.upcoming ?? 0} tone="green" />
+           <StatCard icon={<CheckIcon />} label="Completed" value={stats?.completed ?? 0} tone="purple" />
+           <StatCard icon={<HeartIcon />} label="Favourites" value={stats?.favorite_count ?? 0} tone="rose" />
           </>
         )}
       </div>

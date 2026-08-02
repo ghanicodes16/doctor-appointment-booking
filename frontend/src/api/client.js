@@ -3,7 +3,7 @@
 // It adds the JWT token, sends JSON, parses the response and throws a
 // readable Error (handles FastAPI 422 validation arrays correctly).
 
-const BASE_URL = '/api'
+const BASE_URL = 'https://doctor-appointment-booking-production-392e.up.railway.app'
 
 export async function apiRequest(path, { method = 'GET', body } = {}) {
   const headers = { 'Content-Type': 'application/json' }

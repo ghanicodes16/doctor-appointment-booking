@@ -6,16 +6,24 @@ import { BrowserRouter } from 'react-router-dom'
 
 import App from './App.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
+import { ThemeProvider } from './context/ThemeContext.jsx'
+import { ToastProvider } from './context/ToastContext.jsx'
 import './styles/styles.css'
 
 // Create the root element that React will control.
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     {/* BrowserRouter gives us client-side navigation (URLs like /login). */}
-    <BrowserRouter>
+    <BrowserRouter basename="/doctor-appointment-booking">
       {/* AuthProvider makes login state available to every page. */}
       <AuthProvider>
-        <App />
+        {/* ThemeProvider handles light/dark mode. */}
+        <ThemeProvider>
+          {/* ToastProvider shows popup notifications. */}
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </ThemeProvider>
       </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>

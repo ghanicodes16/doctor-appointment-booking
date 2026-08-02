@@ -79,3 +79,23 @@ def get_current_doctor(
 ):
     """Dependency that returns the Doctor from a valid doctor token."""
     return _get_current_user(credentials, db, expected_role="doctor")
+
+
+def get_optional_patient(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+):
+    """Like get_current_patient, but returns None if not logged in.
+
+    Used by public endpoints (e.g. search) that want to personalise the
+    response (favourites) without forcing a login.
+    """
+    if credentials is None:
+        return None
+    try:
+        payload = decode_access_token(credentials.credentials)
+    except Exception:
+        return None
+    if payload.get("role") != "patient":
+        return None
+    return db.query(models.Patient).filter(models.Patient.id == int(payload["sub"])).first()

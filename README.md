@@ -1,9 +1,14 @@
-# MediBook - Doctor Appointment Booking System
+# ShifaBook - Doctor Appointment Booking System (Pakistan)
 
-A full-stack web application that lets **patients** book doctor appointments online and lets **doctors** manage those appointments from their own dashboard.
+A full-stack **Pakistan healthcare platform** that lets **patients** find the
+right doctor (even by symptom), compare consultation fees, check live
+availability and book appointments online — and lets **doctors**
+self-register with PMDC credentials, manage their own schedule, fees and
+appointments from a rich dashboard.
 
-- **Frontend:** React.js (Vite), React Router, Material-Design-inspired CSS
-- **Backend:** Python + FastAPI (REST API)
+- **Frontend:** React 18 (Vite), React Router 6, custom CSS design system
+  with light/dark mode, toasts, skeletons and SVG charts
+- **Backend:** Python + FastAPI (REST API, auto-documented at `/docs`)
 - **Database:** PostgreSQL (SQLite fallback for a zero-setup demo)
 
 > 📖 **For a complete, beginner-friendly explanation of the whole project**
@@ -16,20 +21,32 @@ A full-stack web application that lets **patients** book doctor appointments onl
 
 **Patient side**
 
-- Register and log in
-- Book an appointment by picking a doctor, date and free time slot
-- Clear error message if a slot is already booked:
-  *"This appointment slot is already booked. Please choose another date or time."*
-- View upcoming / previous appointments (tabs)
-- Reschedule and cancel booked appointments
+- Register / log in (Pakistani phone validation, PKR, 12-hour times)
+- **Symptom-based doctor search** — type *"tooth pain"* and get dentists,
+  *"chest pain"* → cardiologists, etc. (31 mapped symptoms)
+- Advanced filters: specialty, city, minimum rating, max fee; sort by
+  rating / fee
+- Public doctor profiles with PMDC badge, fees (first visit / follow-up),
+  clinic schedule and patient reviews
+- Live time-slot picker that respects working hours, custom slot durations,
+  **unavailable dates**, **blocked slots** and already-booked slots
+- Book / reschedule / cancel appointments; automatic **fee capture**
+  (first visit vs follow-up)
+- Patient dashboard: stats, weekly activity chart, upcoming appointments
+- Favorite doctors, in-app notifications, star-rating reviews
 
 **Doctor side**
 
-- Secure doctor login (JWT, role-based access)
-- Dashboard with statistics (booked / completed / cancelled)
-- Table of all appointments with patient name, patient ID, phone, date, time, status
-- Filter appointments by date
-- Mark appointments as **Completed** or **Cancelled**
+- **Self-registration** with PMDC number, gender, DOB, experience,
+  qualifications, clinic details, languages (English/Urdu/Punjabi/Sindhi…)
+- Profile editing with live "public preview"
+- **Availability manager**: weekly schedule (per-day hours + slot duration),
+  unavailable dates, blocked slots, and an online-booking on/off switch
+- Dashboard analytics: today's/upcoming appointments, total patients,
+  revenue (completed-only), monthly figures, weekly chart and a profile
+  completion meter
+- Appointment queue with date filter; mark appointments Completed/Cancelled
+  (patients are notified instantly)
 
 ---
 
@@ -37,10 +54,10 @@ A full-stack web application that lets **patients** book doctor appointments onl
 
 | Layer      | Technology                                          |
 | ---------- | --------------------------------------------------- |
-| Frontend   | React 18, Vite, React Router 6                       |
-| Backend    | Python 3, FastAPI, SQLAlchemy ORM                    |
-| Database   | PostgreSQL (or SQLite for a quick demo)              |
-| Auth       | JWT (PyJWT) + bcrypt password hashing                |
+| Frontend   | React 18, Vite, React Router 6, custom CSS + SVG    |
+| Backend    | Python 3, FastAPI, SQLAlchemy ORM                   |
+| Database   | PostgreSQL (or SQLite for a quick demo)             |
+| Auth       | JWT (PyJWT) + bcrypt password hashing               |
 | API        | REST (auto-documented at `http://127.0.0.1:8000/docs`) |
 
 ---
@@ -54,31 +71,36 @@ doctor-appointment-booking/
 │   │   ├── main.py           # FastAPI entry point + router registration
 │   │   ├── config.py         # Reads settings from .env
 │   │   ├── database.py       # Database connection + session
-│   │   ├── models.py         # SQLAlchemy table models
+│   │   ├── models.py         # SQLAlchemy models (12 tables)
 │   │   ├── schemas.py        # Pydantic request/response schemas
 │   │   ├── security.py       # Password hashing + JWT helpers
 │   │   ├── deps.py           # Auth dependencies (role checks)
+│   │   ├── utils.py          # Shared helpers (rating, notifications, times)
 │   │   ├── seed.py           # Creates tables + demo data
 │   │   └── routers/          # API endpoint groups
-│   │       ├── auth.py       # register / patient login / doctor login
-│   │       ├── doctors.py    # doctor list + dashboard endpoints
-│   │       ├── patients.py   # patient profile endpoint
-│   │       └── appointments.py  # booking / slots / reschedule / cancel
+│   │       ├── auth.py       # patient/doctor register + login
+│   │       ├── doctors.py    # profiles, schedule, availability, stats
+│   │       ├── patients.py   # patient profile, favorites, stats
+│   │       ├── appointments.py  # slots / booking / reschedule / cancel
+│   │       ├── search.py     # symptom-mapped search + catalog
+│   │       ├── reviews.py    # doctor reviews
+│   │       └── notifications.py # in-app notifications
 │   ├── sql/
-│   │   ├── schema.sql        # PostgreSQL table creation script
-│   │   └── sample_data.sql   # Optional demo data for PostgreSQL
+│   │   ├── schema.sql        # PostgreSQL DDL (12 tables)
+│   │   └── sample_data.sql   # Optional demo data
 │   ├── requirements.txt      # Python dependencies
 │   ├── .env.example          # Example environment file
-│   └── .env                  # Local settings (SQLite by default)
+│   └── .env                  # Local settings
 ├── frontend/                 # React frontend
 │   ├── src/
-│   │   ├── main.jsx          # React entry point
+│   │   ├── main.jsx          # Entry point (Theme/Toast/Auth providers)
 │   │   ├── App.jsx           # Route definitions
 │   │   ├── api/client.js     # fetch() helper for all API calls
-│   │   ├── context/AuthContext.jsx  # global login state
-│   │   ├── components/       # Navbar, ProtectedRoute, Spinner, Alert, ...
-│   │   ├── pages/            # Home, patient/ and doctor/ pages
-│   │   └── styles/styles.css # all styling (Material-inspired)
+│   │   ├── context/          # Auth, Theme (dark mode), Toast contexts
+│   │   ├── utils/format.js   # PKR, 12h time, date + Pakistan helpers
+│   │   ├── components/       # Navbar, dashboards, cards, chart, modal, ...
+│   │   ├── pages/            # Home, Search, patient/ and doctor/ pages
+│   │   └── styles/styles.css # design system (light/dark themes)
 │   ├── package.json
 │   └── vite.config.js        # dev server + /api proxy
 ├── start_backend.bat         # Windows: start the backend
@@ -99,7 +121,7 @@ doctor-appointment-booking/
    ```sql
    CREATE DATABASE appointment_db;
    ```
-4. Create the tables and demo data (optional - the backend also does this automatically):
+4. Create the tables and demo data (optional — the backend also does this automatically):
    ```bash
    cd backend
    psql -U postgres -d appointment_db -f sql/schema.sql
@@ -140,7 +162,7 @@ npm install
 npm run dev
 ```
 
-The app opens at **http://127.0.0.1:5173**.
+The app opens at **http://localhost:5173/doctor-appointment-booking/**.
 
 > The Vite dev server automatically forwards `/api/*` requests to the
 > backend on port 8000, so no CORS configuration is needed.
@@ -149,15 +171,15 @@ The app opens at **http://127.0.0.1:5173**.
 
 If you are on Windows you can double-click:
 
-- **`start_backend.bat`** - installs dependencies (first time) and starts the API
-- **`start_frontend.bat`** - installs dependencies (first time) and starts the React app
+- **`start_backend.bat`** — installs dependencies (first time) and starts the API
+- **`start_frontend.bat`** — installs dependencies (first time) and starts the React app
 
 ---
 
 ## Demo Accounts
 
-| Role    | Email                | Password    |
-| ------- | -------------------- | ----------- |
+| Role    | Email                | Password     |
+| ------- | -------------------- | ------------ |
 | Patient | `alice@example.com`  | `patient123` |
 | Patient | `bob@example.com`    | `patient123` |
 | Patient | `carol@example.com`  | `patient123` |
@@ -166,27 +188,72 @@ If you are on Windows you can double-click:
 | Doctor  | `erodriguez@clinic.com` | `doctor123` |
 | Doctor  | `mchen@clinic.com`   | `doctor123` |
 | Doctor  | `lpark@clinic.com`   | `doctor123` |
+| Doctor  | `araza@clinic.com`   | `doctor123` |
+| Doctor  | `fkhan@clinic.com`   | `doctor123` |
+
+...and 5 more doctors (`ahassan@clinic.com`, `amalik@clinic.com`,
+`isheikh@clinic.com`, `mtariq@clinic.com`, `uchaudhry@clinic.com`,
+`nakhtar@clinic.com`, `kali@clinic.com`, `sbatool@clinic.com`) — all `doctor123`.
 
 ---
 
 ## REST API Overview
 
-| Method | Endpoint                                  | Who        | Description                              |
-| ------ | ----------------------------------------- | ---------- | ---------------------------------------- |
-| POST   | `/api/auth/register`                      | public     | Register a new patient (returns a token) |
-| POST   | `/api/auth/login/patient`                 | public     | Patient login (returns a token)          |
-| POST   | `/api/auth/login/doctor`                  | public     | Doctor login (returns a token)           |
-| GET    | `/api/doctors`                            | public     | List all doctors                         |
-| GET    | `/api/doctors/{id}`                       | public     | Doctor details                           |
-| GET    | `/api/doctors/me`                         | doctor     | Current doctor's profile                 |
-| GET    | `/api/doctors/me/appointments?date=`      | doctor     | Doctor's appointments (date filter)      |
-| PATCH  | `/api/doctors/me/appointments/{id}/status`| doctor     | Mark Completed / Cancelled               |
-| GET    | `/api/patients/me`                        | patient    | Current patient's profile                |
-| GET    | `/api/slots?doctor_id=&appointment_date=` | public     | Free time slots for a doctor+date        |
-| POST   | `/api/appointments`                       | patient    | Book an appointment                      |
-| GET    | `/api/appointments?upcoming=`             | patient    | The patient's appointments               |
-| PATCH  | `/api/appointments/{id}`                  | patient    | Reschedule an appointment                |
-| DELETE | `/api/appointments/{id}`                  | patient    | Cancel an appointment                    |
+### Auth & patients
+
+| Method | Endpoint                                 | Who     | Description                              |
+| ------ | ---------------------------------------- | ------- | ---------------------------------------- |
+| POST   | `/api/auth/register`                     | public  | Register a patient (returns a token)     |
+| POST   | `/api/auth/register/doctor`              | public  | Doctor self-registration (PMDC, fees…)   |
+| POST   | `/api/auth/login/patient`                | public  | Patient login                            |
+| POST   | `/api/auth/login/doctor`                 | public  | Doctor login                             |
+| GET    | `/api/patients/me`                       | patient | Patient profile                          |
+| GET    | `/api/patients/me/stats`                 | patient | Dashboard numbers                        |
+| GET    | `/api/patients/me/favorites`             | patient | Favorite doctors                         |
+| POST   | `/api/patients/me/favorites/{doctor_id}` | patient | Add a favorite                           |
+| DELETE | `/api/patients/me/favorites/{doctor_id}` | patient | Remove a favorite                        |
+
+### Search & catalog
+
+| Method | Endpoint                      | Who    | Description                                   |
+| ------ | ----------------------------- | ------ | --------------------------------------------- |
+| GET    | `/api/search/doctors`         | public | Symptom-mapped search + filters + sort        |
+| GET    | `/api/search/specializations` | public | Specializations (with doctor counts)          |
+| GET    | `/api/search/symptoms`        | public | Symptom autocomplete                          |
+| GET    | `/api/search/recommendations` | public | Popular specializations for the homepage      |
+
+### Doctors (public + doctor-only)
+
+| Method | Endpoint                                  | Who    | Description                          |
+| ------ | ----------------------------------------- | ------ | ------------------------------------ |
+| GET    | `/api/doctors`                            | public | List all doctors                     |
+| GET    | `/api/doctors/{id}`                       | public | Doctor public profile                |
+| GET    | `/api/doctors/{id}/schedule`              | public | Weekly schedule (for booking UI)     |
+| GET    | `/api/doctors/me`                         | doctor | Own profile                          |
+| PATCH  | `/api/doctors/me`                         | doctor | Update profile + fees                |
+| GET/PUT| `/api/doctors/me/schedule`                | doctor | Weekly working hours                 |
+| GET/POST/DELETE | `/api/doctors/me/unavailable-dates`       | doctor | Vacations / leave                    |
+| GET/POST/DELETE | `/api/doctors/me/blocked-slots`           | doctor | Block specific slots                 |
+| PATCH  | `/api/doctors/me/booking`                 | doctor | Enable/disable online booking        |
+| GET    | `/api/doctors/me/stats`                   | doctor | Dashboard analytics + weekly chart   |
+| GET    | `/api/doctors/me/appointments`            | doctor | Appointments (optional date filter)  |
+| PATCH  | `/api/doctors/me/appointments/{id}/status`| doctor | Mark Completed / Cancelled           |
+
+### Appointments & reviews & notifications
+
+| Method | Endpoint                       | Who     | Description                             |
+| ------ | ------------------------------ | ------- | --------------------------------------- |
+| GET    | `/api/slots?doctor_id=&appointment_date=` | public | Free slots for a doctor + date   |
+| POST   | `/api/appointments`            | patient | Book (fee captured automatically)       |
+| GET    | `/api/appointments?upcoming=`  | patient | Patient's appointments                  |
+| PATCH  | `/api/appointments/{id}`       | patient | Reschedule                              |
+| DELETE | `/api/appointments/{id}`       | patient | Cancel                                  |
+| GET    | `/api/reviews?doctor_id=`      | public  | A doctor's reviews                      |
+| POST   | `/api/reviews?doctor_id=`      | patient | Write a review (rating 1–5)             |
+| GET    | `/api/notifications`           | patient | Patient notifications                   |
+| GET    | `/api/notifications/doctor`    | doctor  | Doctor notifications                    |
+| PATCH  | `/api/notifications/{id}/read` | patient | Mark notification read                  |
+| PATCH  | `/api/notifications/doctor/{id}/read` | doctor | Mark notification read            |
 
 ---
 
@@ -194,12 +261,17 @@ If you are on Windows you can double-click:
 
 The backend checks availability **twice**:
 
-1. **Application level** - before saving, it queries for an existing
-   appointment with the same doctor, date and time. If one exists, the
-   patient gets a clear error message.
-2. **Database level** - the `appointments` table has a
-   `UNIQUE (doctor_id, appointment_date, appointment_time)` constraint,
-   so even simultaneous requests cannot create duplicates.
+1. **Application level** — before saving, it rebuilds the slot list for the
+   doctor+date (removing blocked slots, unavailable dates and already-booked
+   times) and rejects any time that is not in that list.
+2. **Database level** — a **partial unique index**
+   `uq_doctor_slot_active` on `(doctor_id, appointment_date,
+   appointment_time)` prevents two *active* appointments on the same slot,
+   so even simultaneous requests cannot create duplicates — while a
+   **cancelled** appointment frees its time for re-booking.
+
+A patient booking for the *second* time with the same doctor is
+automatically charged the **follow-up fee** instead of the first-visit fee.
 
 ---
 

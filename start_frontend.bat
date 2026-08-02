@@ -10,5 +10,5 @@ if not exist "node_modules" (
     call npm install
 )
 
-echo Starting the frontend on http://127.0.0.1:5173  (Ctrl+C to stop)
+echo Starting the frontend on http://localhost:5173/doctor-appointment-booking/  (Ctrl+C to stop)
 call npm run dev

@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import appointments, auth, doctors, patients
+from .routers import appointments, auth, doctors, notifications, patients, reviews, search
 from .seed import seed_data
 
 
@@ -56,6 +56,9 @@ app.include_router(auth.router)
 app.include_router(doctors.router)
 app.include_router(patients.router)
 app.include_router(appointments.router)
+app.include_router(search.router)
+app.include_router(reviews.router)
+app.include_router(notifications.router)
 
 
 @app.get("/")

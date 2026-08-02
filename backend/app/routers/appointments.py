@@ -1,20 +1,24 @@
 """
 routers/appointments.py - Booking endpoints (core business logic).
 
-Endpoints in this file:
+    GET  /api/slots?doctor_id=&appointment_date=   free slots for a doctor+date
+    POST /api/appointments                          book an appointment (patient)
+    GET  /api/appointments                          the patient's appointments
+    PATCH /api/appointments/{id}                    reschedule (patient)
+    DELETE /api/appointments/{id}                   cancel (patient)
 
-    GET  /api/slots                   -> free time slots for a doctor+date (public)
-    POST /api/appointments            -> book a new appointment (patient only)
-    GET  /api/appointments            -> the patient's own appointments (patient only)
-    PATCH /api/appointments/{id}      -> reschedule an appointment (patient only)
-    DELETE /api/appointments/{id}     -> cancel an appointment (patient only)
-
-The MOST IMPORTANT logic in the whole project is inside book_appointment
-(and reschedule_appointment): the double-booking check. See the comments
-below for a full explanation.
+Booking rules:
+    1. The doctor must exist and have booking enabled.
+    2. The date cannot be in the past.
+    3. The doctor must work on that weekday (weekly schedule).
+    4. The date cannot be marked unavailable (vacation/emergency/off).
+    5. The chosen time must be a valid slot within the clinic hours,
+       aligned to the appointment duration and not blocked.
+    6. The slot must not already be booked (double-booking prevention,
+       reinforced by a UNIQUE constraint in the database).
 """
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -22,51 +26,109 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..database import get_db
 from ..deps import get_current_patient
+from ..utils import notify, parse_time
 
 router = APIRouter(prefix="/api", tags=["Appointments"])
 
-# Message shown to the patient when the chosen slot is already taken.
+# The exact message shown to a patient when the doctor is unavailable.
+UNAVAILABLE_MESSAGE = "Doctor is unavailable on this date. Please select another doctor or another available date."
+
+# The exact message shown when a slot is already booked.
 SLOT_BOOKED_MESSAGE = "This appointment slot is already booked. Please choose another date or time."
 
 
-def parse_time(value: str) -> time:
-    """Turn a 'HH:MM' string into a datetime.time object.
+def get_schedule_for_day(db: Session, doctor_id: int, appointment_date: date):
+    """Return the doctor's schedule for the weekday of `appointment_date`.
 
-    Raises a clear 422 error if the string is not a valid time.
+    Returns None if the doctor does not work on that weekday or if the
+    day is marked unavailable in the schedule.
     """
-    try:
-        hour, minute = value.split(":")
-        return time(int(hour), int(minute))
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid time format. Please use HH:MM (e.g. 09:30).",
-        )
-
-
-def slot_is_taken(db: Session, doctor_id: int, appointment_date: date, appointment_time: time) -> bool:
-    """Check whether a slot is already booked for a doctor.
-
-    This is the core anti-double-booking check. It looks for ANY
-    existing appointment row that has the same doctor, the same date and
-    the same time. If such a row exists the slot is taken.
-
-    NOTE: the database also has a UNIQUE constraint on
-    (doctor_id, appointment_date, appointment_time), so even if two
-    booking requests arrived at the exact same moment, the database
-    would reject the second one. Our query here makes the check faster
-    and lets us return a friendly error message to the patient.
-    """
-    existing = (
-        db.query(models.Appointment)
+    return (
+        db.query(models.DoctorSchedule)
         .filter(
-            models.Appointment.doctor_id == doctor_id,
-            models.Appointment.appointment_date == appointment_date,
-            models.Appointment.appointment_time == appointment_time,
+            models.DoctorSchedule.doctor_id == doctor_id,
+            models.DoctorSchedule.day_of_week == appointment_date.weekday(),
+            models.DoctorSchedule.is_available.is_(True),
         )
         .first()
     )
-    return existing is not None
+
+
+def get_unavailable_date(db: Session, doctor_id: int, appointment_date: date):
+    """Return the UnavailableDate row for a doctor+date, or None."""
+    return (
+        db.query(models.UnavailableDate)
+        .filter(
+            models.UnavailableDate.doctor_id == doctor_id,
+            models.UnavailableDate.date == appointment_date,
+        )
+        .first()
+    )
+
+
+def build_available_slots(db: Session, doctor, appointment_date: date):
+    """Compute the free slots for a doctor on a date.
+
+    Returns (is_available, message, [slot strings]).
+    """
+    # 1. Booking switch.
+    if not doctor.booking_enabled:
+        return False, UNAVAILABLE_MESSAGE, []
+
+    # 2. Working day?
+    schedule = get_schedule_for_day(db, doctor.id, appointment_date)
+    if schedule is None:
+        return False, UNAVAILABLE_MESSAGE, []
+
+    # 3. Unavailable (vacation / emergency / off)?
+    if get_unavailable_date(db, doctor.id, appointment_date) is not None:
+        return False, UNAVAILABLE_MESSAGE, []
+
+    # 4. Generate all slots within the clinic hours.
+    duration = schedule.duration_minutes
+    all_slots = models.generate_slots(schedule.start_time, schedule.end_time, duration)
+
+    # 5. Remove blocked slots for that date.
+    blocked = {
+        b.start_time
+        for b in db.query(models.BlockedSlot).filter(
+            models.BlockedSlot.doctor_id == doctor.id,
+            models.BlockedSlot.date == appointment_date,
+        )
+    }
+
+    # 6. Remove already-booked slots.
+    booked = {
+        a.appointment_time
+        for a in db.query(models.Appointment).filter(
+            models.Appointment.doctor_id == doctor.id,
+            models.Appointment.appointment_date == appointment_date,
+            models.Appointment.status != models.AppointmentStatus.CANCELLED,
+        )
+    }
+
+    free = [s.strftime("%H:%M") for s in all_slots if s not in blocked and s not in booked]
+    return True, None, free
+
+
+def calculate_fee(db: Session, doctor, patient_id: int) -> tuple[int, str]:
+    """Decide the consultation fee + visit type.
+
+    First visit -> first_visit_fee. If the patient has any previous
+    appointment with this doctor -> follow-up -> followup_fee.
+    """
+    previous = (
+        db.query(models.Appointment)
+        .filter(
+            models.Appointment.doctor_id == doctor.id,
+            models.Appointment.patient_id == patient_id,
+            models.Appointment.status != models.AppointmentStatus.CANCELLED,
+        )
+        .first()
+    )
+    if previous is not None:
+        return doctor.followup_fee, "Follow-up"
+    return doctor.first_visit_fee, "First"
 
 
 @router.get("/slots", response_model=schemas.AvailableSlotsOut)
@@ -75,39 +137,24 @@ def get_available_slots(
     appointment_date: date,
     db: Session = Depends(get_db),
 ):
-    """Return all free time slots for a doctor on a given date.
-
-    This is called by the booking page so the patient can see which
-    times are still available before choosing one.
-    """
-    # Make sure the doctor exists (otherwise there is nothing to book).
+    """Return the free time slots for a doctor on a date."""
     doctor = db.query(models.Doctor).filter(models.Doctor.id == doctor_id).first()
     if doctor is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found.")
 
-    # Refuse past dates - you cannot book an appointment in the past.
     if appointment_date < date.today():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You cannot book an appointment for a past date.",
         )
 
-    # Fetch every time that is already taken for this doctor on this date.
-    booked_times = {
-        a.appointment_time
-        for a in db.query(models.Appointment).filter(
-            models.Appointment.doctor_id == doctor_id,
-            models.Appointment.appointment_date == appointment_date,
-        )
-    }
-
-    # The free slots are all standard slots minus the booked ones.
-    free_slots = [s.strftime("%H:%M") for s in models.available_slots() if s not in booked_times]
-
+    is_available, message, slots = build_available_slots(db, doctor, appointment_date)
     return schemas.AvailableSlotsOut(
         doctor_id=doctor_id,
         appointment_date=appointment_date,
-        available_slots=free_slots,
+        is_available=is_available,
+        message=message,
+        available_slots=slots,
     )
 
 
@@ -117,19 +164,10 @@ def book_appointment(
     patient: models.Patient = Depends(get_current_patient),
     db: Session = Depends(get_db),
 ):
-    """Book a new appointment for the logged-in patient.
-
-    Steps:
-      1. Validate the doctor and the time format.
-      2. Reject past dates.
-      3. Check the slot is not already taken (double-booking check).
-      4. Save the appointment in the database.
-    """
+    """Book a new appointment with full availability validation."""
     doctor = db.query(models.Doctor).filter(models.Doctor.id == data.doctor_id).first()
     if doctor is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Doctor not found.")
-
-    appointment_time = parse_time(data.appointment_time)
 
     if data.appointment_date < date.today():
         raise HTTPException(
@@ -137,11 +175,27 @@ def book_appointment(
             detail="You cannot book an appointment for a past date.",
         )
 
-    # >>> DOUBLE-BOOKING CHECK <<<
-    # If a booking already exists for this doctor/date/time we refuse the
-    # request with a clear, patient-friendly message.
-    if slot_is_taken(db, doctor.id, data.appointment_date, appointment_time):
+    appointment_time = parse_time(data.appointment_time)
+
+    # Availability checks -> friendly messages.
+    is_available, message, _ = build_available_slots(db, doctor, data.appointment_date)
+    if not is_available:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message or UNAVAILABLE_MESSAGE)
+
+    # Make sure the chosen time is actually one of the generated slots.
+    schedule = get_schedule_for_day(db, doctor.id, data.appointment_date)
+    if appointment_time not in models.generate_slots(schedule.start_time, schedule.end_time, schedule.duration_minutes):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The selected time is not a valid slot. Please choose from the available slots.",
+        )
+
+    # Double-booking prevention (application level).
+    if _slot_taken(db, doctor.id, data.appointment_date, appointment_time):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=SLOT_BOOKED_MESSAGE)
+
+    # Calculate the consultation fee (first visit vs follow-up).
+    fee, visit_type = calculate_fee(db, doctor, patient.id)
 
     appointment = models.Appointment(
         doctor_id=doctor.id,
@@ -149,31 +203,56 @@ def book_appointment(
         appointment_date=data.appointment_date,
         appointment_time=appointment_time,
         status=models.AppointmentStatus.BOOKED,
+        consultation_fee=fee,
+        visit_type=visit_type,
     )
     db.add(appointment)
     db.commit()
     db.refresh(appointment)
+
+    # Notify the doctor about the new booking.
+    notify(
+        db,
+        role="doctor",
+        recipient_id=doctor.id,
+        message=f"New appointment booked by {patient.name} on {appointment.appointment_date} at "
+        f"{appointment.to_time_string()} (fee Rs. {fee}).",
+        notification_type="booking",
+    )
+    db.commit()
+
+    appointment.doctor = appointment.doctor
+    appointment.patient = appointment.patient
     return appointment
+
+
+def _slot_taken(db: Session, doctor_id: int, appointment_date: date, appointment_time: time) -> bool:
+    """Check whether a slot is already booked (excluding cancelled rows)."""
+    existing = (
+        db.query(models.Appointment)
+        .filter(
+            models.Appointment.doctor_id == doctor_id,
+            models.Appointment.appointment_date == appointment_date,
+            models.Appointment.appointment_time == appointment_time,
+            models.Appointment.status != models.AppointmentStatus.CANCELLED,
+        )
+        .first()
+    )
+    return existing is not None
 
 
 @router.get("/appointments", response_model=list[schemas.AppointmentOut])
 def get_my_appointments(
-    upcoming: bool | None = Query(default=None, description="If true, only future appointments"),
+    upcoming: bool | None = Query(default=None),
     patient: models.Patient = Depends(get_current_patient),
     db: Session = Depends(get_db),
 ):
-    """Return all appointments of the logged-in patient.
-
-    Use ?upcoming=true to see only future/upcoming appointments, or
-    ?upcoming=false to see only past ones. Without the parameter, both
-    are returned. The patient's appointments page uses this endpoint.
-    """
+    """Return the logged-in patient's appointments (optional upcoming filter)."""
     query = (
         db.query(models.Appointment)
         .filter(models.Appointment.patient_id == patient.id)
         .order_by(models.Appointment.appointment_date.desc(), models.Appointment.appointment_time.desc())
     )
-
     if upcoming is not None:
         today = date.today()
         if upcoming:
@@ -185,7 +264,6 @@ def get_my_appointments(
     for appointment in appointments:
         appointment.doctor = appointment.doctor
         appointment.patient = appointment.patient
-
     return appointments
 
 
@@ -196,10 +274,7 @@ def reschedule_appointment(
     patient: models.Patient = Depends(get_current_patient),
     db: Session = Depends(get_db),
 ):
-    """Reschedule (change the date/time of) one of the patient's appointments.
-
-    The same double-booking rules apply: the new slot must be free.
-    """
+    """Reschedule one of the patient's appointments (new slot must be free)."""
     appointment = (
         db.query(models.Appointment)
         .filter(models.Appointment.id == appointment_id, models.Appointment.patient_id == patient.id)
@@ -208,13 +283,13 @@ def reschedule_appointment(
     if appointment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found.")
 
-    # Only Booked appointments can be rescheduled.
     if appointment.status != models.AppointmentStatus.BOOKED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Only booked appointments can be rescheduled.",
         )
 
+    doctor = appointment.doctor
     new_time = parse_time(data.appointment_time)
 
     if data.appointment_date < date.today():
@@ -223,8 +298,18 @@ def reschedule_appointment(
             detail="You cannot book an appointment for a past date.",
         )
 
-    # The same anti-double-booking check, but we must ignore the current
-    # appointment itself (otherwise changing anything would always fail).
+    is_available, message, _ = build_available_slots(db, doctor, data.appointment_date)
+    if not is_available:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message or UNAVAILABLE_MESSAGE)
+
+    schedule = get_schedule_for_day(db, doctor.id, data.appointment_date)
+    if new_time not in models.generate_slots(schedule.start_time, schedule.end_time, schedule.duration_minutes):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The selected time is not a valid slot. Please choose from the available slots.",
+        )
+
+    # Same anti-double-booking check, ignoring the appointment itself.
     taken = (
         db.query(models.Appointment)
         .filter(
@@ -232,6 +317,7 @@ def reschedule_appointment(
             models.Appointment.appointment_date == data.appointment_date,
             models.Appointment.appointment_time == new_time,
             models.Appointment.id != appointment.id,
+            models.Appointment.status != models.AppointmentStatus.CANCELLED,
         )
         .first()
     )
@@ -242,6 +328,19 @@ def reschedule_appointment(
     appointment.appointment_time = new_time
     db.commit()
     db.refresh(appointment)
+
+    notify(
+        db,
+        role="doctor",
+        recipient_id=doctor.id,
+        message=f"{patient.name} rescheduled an appointment to {appointment.appointment_date} at "
+        f"{appointment.to_time_string()}.",
+        notification_type="reschedule",
+    )
+    db.commit()
+
+    appointment.doctor = appointment.doctor
+    appointment.patient = appointment.patient
     return appointment
 
 
@@ -251,11 +350,7 @@ def cancel_appointment(
     patient: models.Patient = Depends(get_current_patient),
     db: Session = Depends(get_db),
 ):
-    """Cancel one of the patient's appointments.
-
-    We keep the row in the database but change its status to
-    "Cancelled". This keeps a full history for the doctor's dashboard.
-    """
+    """Cancel one of the patient's appointments (status becomes Cancelled)."""
     appointment = (
         db.query(models.Appointment)
         .filter(models.Appointment.id == appointment_id, models.Appointment.patient_id == patient.id)
@@ -265,10 +360,7 @@ def cancel_appointment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found.")
 
     if appointment.status == models.AppointmentStatus.CANCELLED:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This appointment is already cancelled.",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This appointment is already cancelled.")
 
     if appointment.status == models.AppointmentStatus.COMPLETED:
         raise HTTPException(
@@ -276,7 +368,21 @@ def cancel_appointment(
             detail="A completed appointment cannot be cancelled.",
         )
 
+    doctor = appointment.doctor
     appointment.status = models.AppointmentStatus.CANCELLED
     db.commit()
     db.refresh(appointment)
+
+    notify(
+        db,
+        role="doctor",
+        recipient_id=doctor.id,
+        message=f"{patient.name} cancelled the appointment on {appointment.appointment_date} at "
+        f"{appointment.to_time_string()}.",
+        notification_type="cancel",
+    )
+    db.commit()
+
+    appointment.doctor = appointment.doctor
+    appointment.patient = appointment.patient
     return appointment

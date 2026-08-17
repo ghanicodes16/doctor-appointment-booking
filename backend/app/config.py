@@ -43,6 +43,20 @@ class Settings(BaseSettings):
     # How long a login token stays valid (in minutes). 1440 = 24 hours.
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
+    # Groq API settings (ShifaBook AI Health Assistant).
+    # The API key is SECRET: it lives ONLY in backend/.env locally and in
+    # Railway variables in production - never in React code or on GitHub.
+    # Leave the key empty and the AI endpoints return a clear message.
+    GROQ_API_KEY: str = ""
+    # Model used for text analysis (PDFs/notes) and chat. Text models are
+    # fastest for reading documents.
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    # Model used automatically when the patient uploads an IMAGE (JPG/PNG/
+    # WEBP). This must be a vision-capable model. Older vision previews
+    # (llama-3.2-*-vision-preview) have been decommissioned on Groq.
+    # qwen/qwen3.6-27b outputs excessive reasoning; groq/compound is more concise.
+    GROQ_VISION_MODEL: str = "groq/compound"
+
     # Tell pydantic-settings where to find the .env file.
     model_config = {"env_file": BASE_DIR / ".env", "env_file_encoding": "utf-8"}
 

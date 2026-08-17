@@ -10,7 +10,7 @@ import WeeklyChart from '../../components/WeeklyChart.jsx'
 import DoctorCard from '../../components/DoctorCard.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import Skeleton from '../../components/Skeleton.jsx'
-import { CalendarIcon, HeartIcon, ClockIcon, CheckIcon, XIcon, ChartIcon, StethoscopeIcon } from '../../components/icons.jsx'
+import { CalendarIcon, HeartIcon, ClockIcon, CheckIcon, XIcon, ChartIcon, StethoscopeIcon, SparklesIcon } from '../../components/icons.jsx'
 import { formatDate, formatTime12h, DAY_SHORT } from '../../utils/format.js'
 
 export default function Dashboard() {
@@ -144,6 +144,22 @@ export default function Dashboard() {
             </Link>
           ))}
         </div>
+      </section>
+
+      <section className="card ai-dash-card">
+        <div className="ai-dash-card-icon">
+          <SparklesIcon size="lg" />
+        </div>
+        <div className="ai-dash-card-body">
+          <h2 className="card-title">ShifaBook AI Health Assistant</h2>
+          <p>
+            Upload a medical report, prescription or test result and get a simple, safe explanation plus a
+            recommendation for the right specialist.
+          </p>
+        </div>
+        <Link to="/ai-assistant" className="btn btn-primary">
+          Analyze my report
+        </Link>
       </section>
     </DashboardLayout>
   )

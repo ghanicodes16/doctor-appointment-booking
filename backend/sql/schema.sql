@@ -219,3 +219,52 @@ CREATE TABLE IF NOT EXISTS reviews (
 );
 
 CREATE INDEX IF NOT EXISTS idx_reviews_doctor ON reviews (doctor_id);
+
+-- ---------------------------------------------------------------------
+-- 13. ai_reports  (ShifaBook AI Health Assistant)
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS ai_reports (
+    id                   SERIAL PRIMARY KEY,
+    patient_id           INT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+    original_filename    VARCHAR(255) NOT NULL,
+    stored_path          VARCHAR(500),              -- private file path (never served)
+    file_type            VARCHAR(20) NOT NULL,      -- jpg / jpeg / png / webp / pdf
+    file_size            INT NOT NULL DEFAULT 0,    -- bytes
+    report_type          VARCHAR(100),
+    extracted_text       TEXT,                      -- PDF text (images are read at analyze time)
+    analysis_result      TEXT,                      -- validated JSON from Groq
+    urgency_level        VARCHAR(20),               -- green / orange / red
+    recommended_specialty VARCHAR(100),
+    analysis_status      VARCHAR(20) NOT NULL DEFAULT 'pending',  -- pending/analyzing/analyzed/failed
+    error_message        TEXT,
+    created_at           TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at           TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_reports_patient ON ai_reports (patient_id);
+
+-- ---------------------------------------------------------------------
+-- 14. ai_conversations  (one chat thread per AI report)
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS ai_conversations (
+    id         SERIAL PRIMARY KEY,
+    patient_id INT NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+    report_id  INT NOT NULL REFERENCES ai_reports(id) ON DELETE CASCADE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_conversations_report ON ai_conversations (report_id);
+
+-- ---------------------------------------------------------------------
+-- 15. ai_messages  (messages inside an AI chat thread)
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS ai_messages (
+    id              SERIAL PRIMARY KEY,
+    conversation_id INT NOT NULL REFERENCES ai_conversations(id) ON DELETE CASCADE,
+    role            VARCHAR(20) NOT NULL,           -- user / assistant
+    message         TEXT NOT NULL,
+    created_at      TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ai_messages_conversation ON ai_messages (conversation_id);

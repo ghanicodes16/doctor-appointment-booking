@@ -10,3 +10,6 @@ PyJWT>=2.9                 # Creates and verifies JWT login tokens.
 bcrypt>=4.1                # Hashes and verifies passwords securely.
 python-dotenv>=1.0         # Loads the .env file (used with pydantic-settings).
 email-validator>=2.2       # Validates email addresses in the request schemas.
+groq>=0.9                  # Official Groq SDK (ShifaBook AI Health Assistant).
+pypdf>=4.0                 # Extracts text from uploaded PDFs.
+python-multipart>=0.0.9    # Handles file uploads in FastAPI.

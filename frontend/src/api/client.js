@@ -2,8 +2,22 @@
 //
 // It adds the JWT token, sends JSON, parses the response and throws a
 // readable Error (handles FastAPI 422 validation arrays correctly).
+//
+// The API address can be overridden with VITE_API_URL (see .env.development
+// where it is set to "/api" so the local dev server proxies to the local
+// backend). Production builds fall back to the deployed Railway API.
 
-const BASE_URL = 'https://doctor-appointment-booking-production-392e.up.railway.app'
+const BASE_URL = (import.meta.env.VITE_API_URL || 'https://doctor-appointment-booking-production-392e.up.railway.app/api').replace(/\/+$/, '')
+
+function clearAuthAndRedirect() {
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('user')
+  localStorage.removeItem('role')
+  // Only redirect if we're not already on a login page
+  if (!window.location.pathname.includes('/login')) {
+    window.location.href = '/doctor/login'
+  }
+}
 
 export async function apiRequest(path, { method = 'GET', body } = {}) {
   const headers = { 'Content-Type': 'application/json' }
@@ -27,6 +41,10 @@ export async function apiRequest(path, { method = 'GET', body } = {}) {
   }
 
   if (!response.ok) {
+    // Handle 401 Unauthorized - clear auth state and redirect to login
+    if (response.status === 401) {
+      clearAuthAndRedirect()
+    }
     let message
     if (typeof data?.detail === 'string') {
       message = data.detail
@@ -144,3 +162,38 @@ export const markDoctorNotificationRead = (id) =>
 export const getDoctorReviews = (doctorId) => apiRequest(`/reviews?doctor_id=${doctorId}`)
 export const addReview = (doctorId, rating, comment) =>
   apiRequest(`/reviews?doctor_id=${doctorId}`, { method: 'POST', body: { rating, comment } })
+
+// ------------------------- AI Health Assistant -------------------------
+// Upload uses XMLHttpRequest because fetch cannot report upload progress.
+export function uploadAIReport(file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const token = localStorage.getItem('access_token')
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `${BASE_URL}/ai/reports`)
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100))
+    }
+    xhr.onload = () => {
+      let data = null
+      try {
+        data = JSON.parse(xhr.responseText)
+      } catch {
+        /* non-JSON response */
+      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(data)
+      else reject(new Error(data?.detail || `Upload failed (${xhr.status})`))
+    }
+    xhr.onerror = () => reject(new Error('Network error during upload'))
+    const fd = new FormData()
+    fd.append('file', file)
+    xhr.send(fd)
+  })
+}
+export const getAIReports = () => apiRequest('/ai/reports')
+export const getAIReport = (id) => apiRequest(`/ai/reports/${id}`)
+export const deleteAIReport = (id) => apiRequest(`/ai/reports/${id}`, { method: 'DELETE' })
+export const analyzeAIReport = (id) => apiRequest(`/ai/reports/${id}/analyze`, { method: 'POST' })
+export const chatAIReport = (id, message) =>
+  apiRequest(`/ai/reports/${id}/chat`, { method: 'POST', body: { message } })
+export const getAIMessages = (id) => apiRequest(`/ai/reports/${id}/messages`)

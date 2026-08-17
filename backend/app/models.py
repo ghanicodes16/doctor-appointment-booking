@@ -141,6 +141,8 @@ class Patient(Base):
     appointments = relationship("Appointment", back_populates="patient")
     favorites = relationship("PatientFavorite", back_populates="patient")
     reviews = relationship("Review", back_populates="patient")
+    ai_reports = relationship("AIReport", back_populates="patient")
+    ai_conversations = relationship("AIConversation", back_populates="patient")
 
 
 class Appointment(Base):
@@ -336,6 +338,70 @@ class Review(Base):
 
     doctor = relationship("Doctor", back_populates="reviews")
     patient = relationship("Patient", back_populates="reviews")
+
+
+# ---------------------------------------------------------------------------
+# AI Health Assistant (real Groq API)
+# ---------------------------------------------------------------------------
+
+class AIReport(Base):
+    """An uploaded medical document analyzed by the ShifaBook AI assistant.
+
+    The raw file is stored privately in backend/uploads (never served
+    publicly). Only extracted text + the analysis result are kept in the
+    database for the patient to view and chat about.
+    """
+
+    __tablename__ = "ai_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False, index=True)
+    original_filename = Column(String(255), nullable=False)
+    stored_path = Column(String(500), nullable=True)         # private file path
+    file_type = Column(String(20), nullable=False)           # jpg / jpeg / png / webp / pdf
+    file_size = Column(Integer, nullable=False, default=0)   # bytes
+    report_type = Column(String(100), nullable=True)
+    extracted_text = Column(Text, nullable=True)
+    analysis_result = Column(Text, nullable=True)            # JSON string
+    urgency_level = Column(String(20), nullable=True)        # green / orange / red
+    recommended_specialty = Column(String(100), nullable=True)
+    analysis_status = Column(String(20), nullable=False, default="pending")  # pending / analyzing / analyzed / failed
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    patient = relationship("Patient", back_populates="ai_reports")
+    conversations = relationship("AIConversation", back_populates="report", cascade="all, delete-orphan")
+
+
+class AIConversation(Base):
+    """A chat thread about one AI report."""
+
+    __tablename__ = "ai_conversations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False, index=True)
+    report_id = Column(Integer, ForeignKey("ai_reports.id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    patient = relationship("Patient", back_populates="ai_conversations")
+    report = relationship("AIReport", back_populates="conversations")
+    messages = relationship("AIMessage", back_populates="conversation", cascade="all, delete-orphan")
+
+
+class AIMessage(Base):
+    """One message in an AI chat thread (role: "user" or "assistant")."""
+
+    __tablename__ = "ai_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("ai_conversations.id"), nullable=False, index=True)
+    role = Column(String(20), nullable=False)
+    message = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+    conversation = relationship("AIConversation", back_populates="messages")
 
 
 # ---------------------------------------------------------------------------

@@ -387,3 +387,64 @@ class PatientStatsOut(BaseModel):
     completed: int
     cancelled: int
     favorite_count: int
+
+
+# ---------------------------------------------------------------------------
+# AI Health Assistant schemas
+# ---------------------------------------------------------------------------
+
+class AIReportOut(BaseModel):
+    """Summary of an uploaded medical document (safe to send to the browser)."""
+
+    id: int
+    patient_id: int
+    original_filename: str
+    file_type: str
+    file_size: int
+    report_type: str | None = None
+    urgency_level: str | None = None
+    recommended_specialty: str | None = None
+    analysis_status: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AIAnalysisResult(BaseModel):
+    """The structured, validated output of the Groq analysis."""
+
+    report_type: str
+    summary: str
+    important_findings: list[str]
+    normal_findings: list[str]
+    possible_explanations: list[str]
+    questions_for_doctor: list[str]
+    recommended_specialty: str
+    urgency: str
+    safety_message: str
+
+
+class AIReportDetailOut(AIReportOut):
+    """One document plus its parsed analysis (used by the assistant page)."""
+
+    analysis: AIAnalysisResult | None = None
+    error_message: str | None = None
+
+
+class AIChatRequest(BaseModel):
+    """A patient's follow-up question in the AI chat."""
+
+    message: str = Field(..., min_length=1, max_length=2000)
+
+
+class AIChatMessageOut(BaseModel):
+    id: int
+    role: str
+    message: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AIChatResponse(BaseModel):
+    messages: list[AIChatMessageOut]

@@ -7,6 +7,12 @@ venv/
 
 # Environment files (never commit real secrets)
 backend/.env
+backend/uploads/
+
+# Local frontend env overrides that may hold secrets
+frontend/.env
+frontend/.env.local
+frontend/.env.production.local
 
 # Databases
 *.db

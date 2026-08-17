@@ -12,6 +12,7 @@
 //   /doctor/register   -> doctor registration
 //   /doctor/dashboard  -> doctor dashboard (doctor only)
 //   /doctor/appointments, /doctor/schedule, /doctor/profile
+//   /ai-assistant      -> ShifaBook AI Health Assistant (patient only)
 import { Navigate, Route, Routes } from 'react-router-dom'
 
 import Navbar from './components/Navbar.jsx'
@@ -24,6 +25,7 @@ import PatientRegister from './pages/patient/Register.jsx'
 import PatientDashboard from './pages/patient/Dashboard.jsx'
 import MyAppointments from './pages/patient/Appointments.jsx'
 import Favorites from './pages/patient/Favorites.jsx'
+import AIAssistant from './pages/patient/AIAssistant.jsx'
 import DoctorLogin from './pages/doctor/Login.jsx'
 import DoctorRegister from './pages/doctor/Register.jsx'
 import DoctorDashboard from './pages/doctor/Dashboard.jsx'
@@ -69,6 +71,14 @@ export default function App() {
             element={
               <ProtectedRoute requiredRole="patient">
                 <Favorites />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/ai-assistant"
+            element={
+              <ProtectedRoute requiredRole="patient">
+                <AIAssistant />
               </ProtectedRoute>
             }
           />
